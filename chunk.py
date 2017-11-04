@@ -1,5 +1,5 @@
-from io import BytesIO, BufferedReader
 from event import FLEvent, FLEventType
+import io
 import struct
 
 # FL chunk class
@@ -9,10 +9,6 @@ class FLChunk:
   def __init__(self, type):
     self.type = type
     
-  # Convert to string
-  def __str__(self):
-    return self.__class__.__name__
-    
   # Read a chunk from a stream
   @classmethod
   def read(cls, stream):
@@ -20,21 +16,20 @@ class FLChunk:
     type_bytes = stream.read(4)
     type = type_bytes.decode()
     
-    # Read the chunk length
+    # Read the chunk size
     size_bytes = stream.read(4)
     size = struct.unpack("<I",size_bytes)[0]
     
     # Read the content
-    content = stream.read(size)
+    bytes = stream.read(size)
     
     # Parse the chunk if applicable
     if type == "FLhd":
-      return FLHeaderChunk.parse(content)
+      return FLHeaderChunk.parse(bytes)
     elif type == "FLdt":
-      return FLDataChunk.parse(content)
+      return FLDataChunk.parse(bytes)
     else:
       return FLChunk(type)
-      
       
  # FL header chunk class
 class FLHeaderChunk(FLChunk):
@@ -88,7 +83,7 @@ class FLDataChunk(FLChunk):
     events = []
     
     # Create a new stream from the chunk contents
-    stream = BufferedReader(BytesIO(bytes))
+    stream = io.BufferedReader(io.BytesIO(bytes))
     
     # Get the size of the stream
     stream.seek(0,2)

@@ -1,16 +1,26 @@
-from io import FileIO
 from chunk import FLChunk
 from event import FLEventType
+import io
 
 # FL project class
 class FLProject:
 
   # Constructor
   def __init__(self, chunks):
+    self.version = ""
+    self.title = ""
+    self.author = ""
+    self.genre = ""
+    self.comment = ""
+  
     self.chunks = chunks
     
+    # Handle all events
+    for event in self.get_data_chunk().events:
+      event.handle(self)
+    
   # Return a chunk with a given type
-  def get_chunk_by_type(self, type):
+  def get_chunk(self, type):
     # Iterate over the chunks
     for chunk in self.chunks:
       # If the types match, return it
@@ -21,43 +31,11 @@ class FLProject:
     
   # Return the header chunk
   def get_header_chunk(self):
-    return self.get_chunk_by_type("FLhd")
+    return self.get_chunk("FLhd")
     
   # Return the data chunk
   def get_data_chunk(self):
-    return self.get_chunk_by_type("FLdt")
-    
-  # Return the project format
-  def get_format(self):
-    return self.get_header_chunk().format
-    
-  # Return the project channel count
-  def get_channel_count(self):
-    return self.get_header_chunk().channel_count
-    
-  # Return the project beat division
-  def get_beat_division(self):
-    return self.get_header_chunk().beat_division
-    
-  # Return the version
-  def get_version(self):
-    return self.get_data_chunk().get_event_by_type(FLEventType.ARRAY_VERSION).get_content_as_string()
-    
-  # Return the title
-  def get_title(self):
-    return self.get_data_chunk().get_event_by_type(FLEventType.ARRAY_TITLE).get_content_as_string()
-    
-  # Return the author
-  def get_author(self):
-    return self.get_data_chunk().get_event_by_type(FLEventType.ARRAY_AUTHOR).get_content_as_string()
-    
-  # Return the genre
-  def get_genre(self):
-    return self.get_data_chunk().get_event_by_type(FLEventType.ARRAY_GENRE).get_content_as_string()
-    
-  # Return the comment
-  def get_comment(self):
-    return self.get_data_chunk().get_event_by_type(FLEventType.ARRAY_COMMENT).get_content_as_string()
+    return self.get_chunk("FLdt")
     
   # Read a project from a stream
   @classmethod
@@ -85,6 +63,6 @@ class FLProject:
   @classmethod
   def open(cls, file_name):
     # Open the file
-    with FileIO(file_name,"r") as stream:
+    with io.BufferedReader(io.FileIO(file_name,"r")) as stream:
       # Read the project from the file stream
       return cls.read(stream)

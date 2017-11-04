@@ -1,33 +1,5 @@
-from enum import Enum
-import struct
-
-# Read the size of an array
-def read_array_size(stream):
-  # Create a counter
-  count = 1
-
-  # Read the first byte
-  size_bytes = stream.read(1)
-  size = struct.unpack("<B",size_bytes)[0]
-  
-  # Create the total size
-  total_size = size
-  
-  # While there are more bytes to read
-  while size >> 7 == 1:
-    # Increase the counter
-    count += 1
-  
-    # Read the next byte
-    size_bytes = stream.read(1)
-    size = struct.unpack("<B",size_bytes)[0]
-
-    # Add it to the total size
-    total_size += (size & 0x7F) << (7 * count)
-    
-  # Return the total size
-  return total_size
-
+import enum
+import utils
 
 # FL event class
 class FLEvent:
@@ -37,16 +9,22 @@ class FLEvent:
     self.type = type
     self.content = content
     
-  # Convert to string
-  def __str__(self):
-    return str.format("{} of type {}",self.__class__.__name__,FLEventType(self.type).name)
+  # Handle the event
+  def handle(self, project):
+    pass
     
   # Read an event from a stream
   @classmethod
   def read(cls, stream):
     # Read the event type
     type_bytes = stream.read(1)
-    type = struct.unpack("<B",type_bytes)[0]
+    type = int.from_bytes(type_bytes,byteorder="little")
+    
+    # Get the event subclass for this type
+    try:
+      event_cls = event_dict[type]
+    except KeyError:
+      event_cls = cls
     
     # Get the base type
     basetype = type >> 6
@@ -54,89 +32,73 @@ class FLEvent:
     # Is it a BYTE event?
     if basetype == 0:
       # Read the next BYTE
-      byte_bytes = stream.read(1)
-      byte = struct.unpack("<B",byte_bytes)[0]
-      
-      # Return a new byte event instance
-      return FLByteEvent(type,byte)
+      content_bytes = stream.read(1)
+      content = int.from_bytes(content_bytes,byteorder="little")
       
     # Is it a WORD event?
     elif basetype == 1:
       # Read the next WORD
-      word_bytes = stream.read(2)
-      word = struct.unpack("<H",word_bytes)[0]
-      
-      # Return a new word event instance
-      return FLWordEvent(type,word)
+      content_bytes = stream.read(2)
+      content = int.from_bytes(content_bytes,byteorder="little")
       
     # Is it a DWORD event?
     elif basetype == 2:
       # Read the next DWORD
-      dword_bytes = stream.read(4)
-      dword = struct.unpack("<I",dword_bytes)[0]
-      
-      # Return a new dword event instance
-      return FLDWordEvent(type,dword)
+      content_bytes = stream.read(4)
+      content = int.from_bytes(content_bytes,byteorder="little")
       
     # Is it an ARRAY event?
     elif basetype == 3:
       # Read the array size
-      array_size = read_array_size(stream)
-      
+      size = utils.read_text_size(stream)
       # Read the array
-      array = stream.read(array_size)
+      content = stream.read(size)
       
-      # Return a new array event instance
-      return FLArrayEvent(type,array)
+    # Return a new event instance
+    return event_cls(type,content)
       
-    # If we execute the next line, someting went terriby wrong
-    else:
-      raise RuntimeError("Should not come here")
-  
-  
-# FL BYTE event class
-class FLByteEvent(FLEvent):
+      
+# ARRAY + 2: Set the project title
+class FLTitleEvent(FLEvent):
+  def handle(self, project):
+    project.title = self.content.decode("utf_16")
+    
+# ARRAY + 3: Set the project comment
+class FLCommentEvent(FLEvent):
+  def handle(self, project):
+    project.comment = self.content.decode("utf_16")
+    
+# ARRAY + 7: Set the project version
+class FLVersionEvent(FLEvent):
+  def handle(self, project):
+    project.version = self.content.decode("ansi")
+    
+# ARRAY + 14: Set the project genre
+class FLGenreEvent(FLEvent):
+  def handle(self, project):
+    project.genre = self.content.decode("utf_16")
+    
+# ARRAY + 15: Set the project author
+class FLAuthorEvent(FLEvent):
+  def handle(self, project):
+    project.author = self.content.decode("utf_16")
 
-  # Constructor
-  def __init__(self, type, content):
-    FLEvent.__init__(self,type,content)
-    
-    
-# FL WORD event class
-class FLWordEvent(FLEvent):
-
-  # Constructor
-  def __init__(self, type, content):
-    FLEvent.__init__(self,type,content)
-    
-    
-# FL DWORD event class
-class FLDWordEvent(FLEvent):
-
-  # Constructor
-  def __init__(self, type, content):
-    FLEvent.__init__(self,type,content)
-
-    
-# FL ARRAY event class
-class FLArrayEvent(FLEvent):
-
-  # Constructor
-  def __init__(self, type, content):
-    FLEvent.__init__(self,type,content)
-    
-  # Return the content as a string
-  def get_content_as_string(self):
-    return self.content.decode()
-    
-
-# FL Event type enum
+# Event dictionary
 BYTE = 0 << 6
 WORD = 1 << 6
 DWORD = 2 << 6
 ARRAY = 3 << 6
 
-class FLEventType(Enum):
+event_dict = {
+  ARRAY + 2: FLTitleEvent,
+  ARRAY + 3: FLCommentEvent,
+  ARRAY + 7: FLVersionEvent,
+  ARRAY + 14: FLGenreEvent,
+  ARRAY + 15: FLAuthorEvent
+}
+
+# FL Event type enum
+class FLEventType(enum.Enum):
   # Byte events
   BYTE_CHAN_ENABLED = BYTE + 0
   BYTE_NOTE_ON = BYTE + 1 # +position
@@ -239,20 +201,20 @@ class FLEventType(Enum):
   # Array events
   ARRAY_CHAN_NAME = ARRAY + 0
   ARRAY_PAT_NAME = ARRAY + 1
-  ARRAY_TITLE = ARRAY + 2
-  ARRAY_COMMENT = ARRAY + 3
+  #ARRAY_TITLE = ARRAY + 2
+  #ARRAY_COMMENT = ARRAY + 3
   ARRAY_SMP_FILE_NAME = ARRAY + 4
   ARRAY_URL = ARRAY + 5
   ARRAY_COMMENT_RTF = ARRAY + 6
-  ARRAY_VERSION = ARRAY + 7
+  #ARRAY_VERSION = ARRAY + 7
   ARRAY_REG_NAME = ARRAY + 8
   ARRAY_DEF_PLUGIN_NAME = ARRAY + 9
   ARRAY_PROJ_DATA_PATH = ARRAY + 10
   ARRAY_PLUGIN_NAME = ARRAY + 11 
   ARRAY_FX_NAME = ARRAY + 12
   ARRAY_TIME_MARKER = ARRAY + 13
-  ARRAY_GENRE = ARRAY + 14
-  ARRAY_AUTHOR = ARRAY + 15
+  #ARRAY_GENRE = ARRAY + 14
+  #ARRAY_AUTHOR = ARRAY + 15
   ARRAY_MIDI_CTRLS = ARRAY + 16
   ARRAY_DELAY = ARRAY + 17
   ARRAY_TS404_PARAMS = ARRAY + 18

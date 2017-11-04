@@ -1,19 +1,21 @@
 from project import FLProject
+from event import FLEvent
 
 # Main function
 def main():
   # Open an FLP
-  project = FLProject.open("examples/tetris.flp")
+  project = FLProject.open("examples/empty.flp")
   
   # Print some basic info
-  print("Format:",project.get_format())
-  print("Channel count:",project.get_channel_count())
-  print("Beat division:",project.get_beat_division())
-  print("Version:",project.get_version())
-  print("Title:",project.get_title())
-  print("Author:",project.get_author())
-  print("Genre:",project.get_genre())
-  print("Comment:",project.get_comment())
+  for event in project.get_data_chunk().events:
+    if type(event) != FLEvent:
+      print(event)
+  
+  print("Version:",project.version)
+  print("Title:",project.title)
+  print("Author:",project.author)
+  print("Genre:",project.genre)
+  print("Comment:",project.comment)
   
 # Execute the main function if not imported
 if __name__ == "__main__":
